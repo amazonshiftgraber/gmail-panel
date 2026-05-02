@@ -1,0 +1,270 @@
+import imaplib
+import email
+import os
+import re
+from datetime import datetime, timedelta
+from email.header import decode_header
+from email.utils import parsedate_to_datetime
+from flask import Flask, jsonify, request, send_from_directory
+
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ── Firestore init ────────────────────────────────────────
+def _find_service_account():
+    # Accept serviceAccountKey.json or any *adminsdk*.json in the same folder
+    candidates = ["serviceAccountKey.json"]
+    for f in os.listdir(BASE_DIR):
+        if "adminsdk" in f and f.endswith(".json"):
+            candidates.insert(0, f)
+    for name in candidates:
+        path = os.path.join(BASE_DIR, name)
+        if os.path.exists(path):
+            return path
+    raise FileNotFoundError("No Firebase service account JSON found in gmail-panel/")
+
+if not firebase_admin._apps:
+    cred = credentials.Certificate(_find_service_account())
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
+
+def fetch_accounts_from_firestore():
+    """Fetch every doc from 'customers' collection fresh every call."""
+    docs = db.collection("customers").stream()
+    accounts = []
+    for doc in docs:
+        d = doc.to_dict()
+        email_addr = (d.get("email_lower") or "").strip().lower()
+        password   = (d.get("gmail_imap_app_password") or "").strip()
+        if email_addr:
+            accounts.append({
+                "doc_id":   doc.id,
+                "email":    email_addr,
+                "password": password,
+                "label":    d.get("label") or d.get("name") or email_addr.split("@")[0],
+            })
+    return accounts
+
+
+# ── Email parsing helpers ─────────────────────────────────
+def decode_str(value):
+    if value is None:
+        return ""
+    parts = decode_header(value)
+    result = []
+    for raw, charset in parts:
+        if isinstance(raw, bytes):
+            result.append(raw.decode(charset or "utf-8", errors="replace"))
+        else:
+            result.append(raw)
+    return "".join(result)
+
+
+def get_body(msg):
+    if msg.is_multipart():
+        for part in msg.walk():
+            ct = part.get_content_type()
+            cd = str(part.get("Content-Disposition", ""))
+            if ct == "text/plain" and "attachment" not in cd:
+                charset = part.get_content_charset() or "utf-8"
+                return part.get_payload(decode=True).decode(charset, errors="replace")
+        for part in msg.walk():
+            if part.get_content_type() == "text/html":
+                charset = part.get_content_charset() or "utf-8"
+                raw = part.get_payload(decode=True).decode(charset, errors="replace")
+                return re.sub(r"<[^>]+>", " ", raw).strip()
+    else:
+        charset = msg.get_content_charset() or "utf-8"
+        payload = msg.get_payload(decode=True)
+        if payload:
+            return payload.decode(charset, errors="replace")
+    return ""
+
+
+def build_imap_or(senders):
+    """Nest IMAP OR clauses for any number of senders."""
+    if len(senders) == 1:
+        return f'FROM "{senders[0]}"'
+    if len(senders) == 2:
+        return f'(OR FROM "{senders[0]}" FROM "{senders[1]}")'
+    return f'(OR FROM "{senders[0]}" {build_imap_or(senders[1:])})'
+
+
+# ── Routes ────────────────────────────────────────────────
+SETTINGS_COLLECTION = "gmail_panel_setting"
+SETTINGS_DOC        = "senders"
+
+
+@app.route("/")
+def index():
+    return send_from_directory(BASE_DIR, "index.html")
+
+
+@app.route("/settings", methods=["GET"])
+def get_settings():
+    try:
+        doc = db.collection(SETTINGS_COLLECTION).document(SETTINGS_DOC).get()
+        if doc.exists:
+            return jsonify(doc.to_dict())
+        return jsonify({"watched_senders": []})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 503
+
+
+@app.route("/settings", methods=["POST"])
+def save_settings():
+    try:
+        data = request.json or {}
+        db.collection(SETTINGS_COLLECTION).document(SETTINGS_DOC).set(data)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 503
+
+
+@app.route("/accounts")
+def get_accounts():
+    """Fetch accounts fresh from Firestore every time — no caching."""
+    try:
+        accounts = fetch_accounts_from_firestore()
+        # Never expose passwords to frontend
+        safe = [{"email": a["email"], "label": a["label"]} for a in accounts]
+        safe.sort(key=lambda x: x["email"])
+        return jsonify(safe)
+    except Exception as e:
+        return jsonify({"error": f"Firestore error: {str(e)}"}), 503
+
+
+@app.route("/fetch", methods=["POST"])
+def fetch_emails():
+    data       = request.json or {}
+    acct_email = data.get("email", "").strip().lower()
+    days       = max(1, int(data.get("days", 3)))
+    senders    = data.get("senders", [])
+
+    if not acct_email:
+        return jsonify({"error": "No account email provided"}), 400
+    if not senders:
+        return jsonify({"error": "No sender filters configured"}), 400
+
+    # Fetch credentials fresh from Firestore
+    try:
+        accounts = fetch_accounts_from_firestore()
+    except Exception as e:
+        return jsonify({"error": f"Firestore error: {str(e)}"}), 503
+
+    acct = next((a for a in accounts if a["email"] == acct_email), None)
+    if not acct:
+        return jsonify({"error": f"Account '{acct_email}' not found in Firestore."}), 404
+
+    password = acct["password"]
+    if not password:
+        return jsonify({"error": f"No IMAP password stored for {acct_email}."}), 400
+
+    # Strip invisible/non-ASCII characters that break IMAP ASCII requirement
+    clean_senders = [re.sub(r'[^\x20-\x7E]', '', s).strip() for s in senders if s]
+    clean_senders = [s for s in clean_senders if s]
+    if not clean_senders:
+        return jsonify({"error": "Sender emails contain only invalid characters after cleaning."}), 400
+
+    since_date   = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
+    from_clause  = build_imap_or(clean_senders)
+    search_str   = f'({from_clause} SINCE "{since_date}")'
+
+    try:
+        # ── Connect, search, disconnect ──
+        imap = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+        imap.login(acct_email, password)
+        imap.select("INBOX")
+
+        status, data_raw = imap.search(None, search_str)
+        imap.logout()
+
+        if status != "OK":
+            return jsonify([])
+
+        uid_list = data_raw[0].split()
+        if not uid_list:
+            return jsonify([])
+
+        # ── Connect, fetch, disconnect ──
+        imap = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+        imap.login(acct_email, password)
+        imap.select("INBOX")
+
+        results = []
+        for uid in uid_list[-100:]:   # latest 100 max
+            try:
+                st, msg_data = imap.fetch(uid, "(RFC822 FLAGS)")
+                if st != "OK":
+                    continue
+
+                raw_email = msg_data[0][1]
+                flags     = str(msg_data[0][0])
+                msg       = email.message_from_bytes(raw_email)
+
+                subject  = decode_str(msg.get("Subject", "(no subject)"))
+                from_raw = decode_str(msg.get("From", ""))
+                date_raw = msg.get("Date", "")
+                body     = get_body(msg)
+                preview  = " ".join(body.split())[:120] if body else ""
+
+                # Parse sender name + email
+                m = re.match(r"^(.*?)\s*<([^>]+)>$", from_raw.strip())
+                if m:
+                    from_name  = m.group(1).strip().strip('"')
+                    from_email = m.group(2).strip().lower()
+                else:
+                    from_name  = from_raw.strip()
+                    from_email = from_raw.strip().lower()
+
+                # Parse date
+                try:
+                    dt           = parsedate_to_datetime(date_raw)
+                    date_iso     = dt.isoformat()
+                    now          = datetime.now(dt.tzinfo)
+                    if dt.date() == now.date():
+                        display_time = dt.strftime("%-I:%M %p")
+                    elif (now - dt).days < 7:
+                        display_time = dt.strftime("%b %d")
+                    else:
+                        display_time = dt.strftime("%b %d, %Y")
+                except Exception:
+                    date_iso     = date_raw
+                    display_time = date_raw
+
+                results.append({
+                    "id":           uid.decode(),
+                    "from":         from_email,
+                    "from_name":    from_name,
+                    "subject":      subject,
+                    "preview":      preview,
+                    "body":         body,
+                    "date":         date_iso,
+                    "display_time": display_time,
+                    "unread":       "\\Seen" not in flags,
+                    "starred":      "\\Flagged" in flags,
+                })
+            except Exception:
+                continue
+
+        imap.logout()
+        results.sort(key=lambda x: x["date"], reverse=True)
+        return jsonify(results)
+
+    except imaplib.IMAP4.error as e:
+        msg = str(e)
+        if "AUTHENTICATIONFAILED" in msg or "Invalid credentials" in msg:
+            return jsonify({"error": "Authentication failed. Check the Gmail App Password in Firestore."}), 401
+        return jsonify({"error": f"IMAP error: {msg}"}), 503
+    except Exception as e:
+        return jsonify({"error": str(e)}), 503
+
+
+if __name__ == "__main__":
+    print("Starting MyMailbox server on http://localhost:4242")
+    app.run(host="0.0.0.0", port=4242, debug=False)

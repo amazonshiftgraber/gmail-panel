@@ -1,0 +1,12 @@
+# Firebase service account keys — never commit these
+*adminsdk*.json
+serviceAccountKey.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# macOS
+.DS_Store

@@ -1,0 +1,5 @@
+[
+  { "email": "yourname1@gmail.com", "password": "xxxx-xxxx-xxxx-xxxx", "label": "Account 1" },
+  { "email": "yourname2@gmail.com", "password": "xxxx-xxxx-xxxx-xxxx", "label": "Account 2" },
+  { "email": "yourname3@gmail.com", "password": "xxxx-xxxx-xxxx-xxxx", "label": "Account 3" }
+]
