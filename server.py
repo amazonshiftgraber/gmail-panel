@@ -224,15 +224,15 @@ def fetch_emails():
 
                 # Parse date
                 try:
-                    dt           = parsedate_to_datetime(date_raw)
+                    dt           = parsedate_to_datetime(date_raw).astimezone()
                     date_iso     = dt.isoformat()
-                    now          = datetime.now(dt.tzinfo)
+                    now          = datetime.now().astimezone()
                     if dt.date() == now.date():
                         display_time = dt.strftime("%-I:%M %p")
                     elif (now - dt).days < 7:
-                        display_time = dt.strftime("%b %d")
+                        display_time = dt.strftime("%b %d, %-I:%M %p")
                     else:
-                        display_time = dt.strftime("%b %d, %Y")
+                        display_time = dt.strftime("%b %d %Y, %-I:%M %p")
                 except Exception:
                     date_iso     = date_raw
                     display_time = date_raw
