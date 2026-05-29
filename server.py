@@ -263,5 +263,6 @@ def fetch_emails():
 
 
 if __name__ == "__main__":
-    print("Starting MyMailbox server on http://localhost:4242")
-    app.run(host="0.0.0.0", port=4242, debug=False)
+    port = int(os.environ.get("PORT", 4242))
+    print(f"Starting MyMailbox server on http://localhost:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
