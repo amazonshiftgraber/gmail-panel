@@ -7,46 +7,32 @@ from email.header import decode_header
 from email.utils import parsedate_to_datetime
 from flask import Flask, jsonify, request, send_from_directory
 
-import firebase_admin
-from firebase_admin import credentials, firestore
+from pymongo import MongoClient
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# ── Firestore init ────────────────────────────────────────
-def _find_service_account():
-    # Accept serviceAccountKey.json or any *adminsdk*.json in the same folder
-    candidates = ["serviceAccountKey.json"]
-    for f in os.listdir(BASE_DIR):
-        if "adminsdk" in f and f.endswith(".json"):
-            candidates.insert(0, f)
-    for name in candidates:
-        path = os.path.join(BASE_DIR, name)
-        if os.path.exists(path):
-            return path
-    raise FileNotFoundError("No Firebase service account JSON found in gmail-panel/")
+# ── MongoDB init ──────────────────────────────────────────
+MONGODB_URI           = os.environ.get("MONGODB_URI", "mongodb+srv://amazonshiftgraber_db_user:ps4acPydaJEorEte@amazonca.gjcebw.mongodb.net/")
+MONGODB_DB_NAME       = os.environ.get("MONGODB_DB_NAME", "amazon_shift_new")
+MONGODB_MAX_POOL_SIZE = int(os.environ.get("MONGODB_MAX_POOL_SIZE", "100"))
 
-if not firebase_admin._apps:
-    cred = credentials.Certificate(_find_service_account())
-    firebase_admin.initialize_app(cred)
-
-db = firestore.client()
+_mongo_client = MongoClient(MONGODB_URI, maxPoolSize=MONGODB_MAX_POOL_SIZE)
+db = _mongo_client[MONGODB_DB_NAME]
 
 
-def fetch_accounts_from_firestore():
+def fetch_accounts_from_mongo():
     """Fetch every doc from 'customers' collection fresh every call."""
-    docs = db.collection("customers").stream()
     accounts = []
-    for doc in docs:
-        d = doc.to_dict()
-        email_addr = (d.get("email_lower") or "").strip().lower()
-        password   = (d.get("gmail_imap_app_password") or "").strip()
+    for doc in db["customers"].find({}):
+        email_addr = (doc.get("email_lower") or "").strip().lower()
+        password   = (doc.get("gmail_imap_app_password") or "").strip()
         if email_addr:
             accounts.append({
-                "doc_id":   doc.id,
+                "doc_id":   str(doc["_id"]),
                 "email":    email_addr,
                 "password": password,
-                "label":    d.get("label") or d.get("name") or email_addr.split("@")[0],
+                "label":    doc.get("label") or doc.get("name") or email_addr.split("@")[0],
             })
     return accounts
 
@@ -66,24 +52,31 @@ def decode_str(value):
 
 
 def get_body(msg):
+    """Returns (plain_text, html) tuple. html is None if no HTML part found."""
+    plain, html = None, None
     if msg.is_multipart():
         for part in msg.walk():
             ct = part.get_content_type()
             cd = str(part.get("Content-Disposition", ""))
-            if ct == "text/plain" and "attachment" not in cd:
+            if "attachment" in cd:
+                continue
+            if ct == "text/plain" and plain is None:
                 charset = part.get_content_charset() or "utf-8"
-                return part.get_payload(decode=True).decode(charset, errors="replace")
-        for part in msg.walk():
-            if part.get_content_type() == "text/html":
+                plain = part.get_payload(decode=True).decode(charset, errors="replace")
+            elif ct == "text/html" and html is None:
                 charset = part.get_content_charset() or "utf-8"
-                raw = part.get_payload(decode=True).decode(charset, errors="replace")
-                return re.sub(r"<[^>]+>", " ", raw).strip()
+                html = part.get_payload(decode=True).decode(charset, errors="replace")
     else:
         charset = msg.get_content_charset() or "utf-8"
         payload = msg.get_payload(decode=True)
         if payload:
-            return payload.decode(charset, errors="replace")
-    return ""
+            ct = msg.get_content_type()
+            decoded = payload.decode(charset, errors="replace")
+            if ct == "text/html":
+                html = decoded
+            else:
+                plain = decoded
+    return plain or "", html
 
 
 def build_imap_or(senders):
@@ -108,9 +101,10 @@ def index():
 @app.route("/settings", methods=["GET"])
 def get_settings():
     try:
-        doc = db.collection(SETTINGS_COLLECTION).document(SETTINGS_DOC).get()
-        if doc.exists:
-            return jsonify(doc.to_dict())
+        doc = db[SETTINGS_COLLECTION].find_one({"_id": SETTINGS_DOC})
+        if doc:
+            doc.pop("_id", None)
+            return jsonify(doc)
         return jsonify({"watched_senders": []})
     except Exception as e:
         return jsonify({"error": str(e)}), 503
@@ -120,7 +114,8 @@ def get_settings():
 def save_settings():
     try:
         data = request.json or {}
-        db.collection(SETTINGS_COLLECTION).document(SETTINGS_DOC).set(data)
+        data["_id"] = SETTINGS_DOC
+        db[SETTINGS_COLLECTION].replace_one({"_id": SETTINGS_DOC}, data, upsert=True)
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 503
@@ -128,15 +123,15 @@ def save_settings():
 
 @app.route("/accounts")
 def get_accounts():
-    """Fetch accounts fresh from Firestore every time — no caching."""
+    """Fetch accounts fresh from MongoDB every time — no caching."""
     try:
-        accounts = fetch_accounts_from_firestore()
+        accounts = fetch_accounts_from_mongo()
         # Never expose passwords to frontend
         safe = [{"email": a["email"], "label": a["label"]} for a in accounts]
         safe.sort(key=lambda x: x["email"])
         return jsonify(safe)
     except Exception as e:
-        return jsonify({"error": f"Firestore error: {str(e)}"}), 503
+        return jsonify({"error": f"MongoDB error: {str(e)}"}), 503
 
 
 @app.route("/fetch", methods=["POST"])
@@ -151,15 +146,15 @@ def fetch_emails():
     if not senders:
         return jsonify({"error": "No sender filters configured"}), 400
 
-    # Fetch credentials fresh from Firestore
+    # Fetch credentials fresh from MongoDB
     try:
-        accounts = fetch_accounts_from_firestore()
+        accounts = fetch_accounts_from_mongo()
     except Exception as e:
-        return jsonify({"error": f"Firestore error: {str(e)}"}), 503
+        return jsonify({"error": f"MongoDB error: {str(e)}"}), 503
 
     acct = next((a for a in accounts if a["email"] == acct_email), None)
     if not acct:
-        return jsonify({"error": f"Account '{acct_email}' not found in Firestore."}), 404
+        return jsonify({"error": f"Account '{acct_email}' not found in MongoDB."}), 404
 
     password = acct["password"]
     if not password:
@@ -207,11 +202,12 @@ def fetch_emails():
                 flags     = str(msg_data[0][0])
                 msg       = email.message_from_bytes(raw_email)
 
-                subject  = decode_str(msg.get("Subject", "(no subject)"))
-                from_raw = decode_str(msg.get("From", ""))
-                date_raw = msg.get("Date", "")
-                body     = get_body(msg)
-                preview  = " ".join(body.split())[:120] if body else ""
+                subject   = decode_str(msg.get("Subject", "(no subject)"))
+                from_raw  = decode_str(msg.get("From", ""))
+                date_raw  = msg.get("Date", "")
+                body, body_html = get_body(msg)
+                text_for_preview = body or re.sub(r"<[^>]+>", " ", body_html or "")
+                preview   = " ".join(text_for_preview.split())[:120]
 
                 # Parse sender name + email
                 m = re.match(r"^(.*?)\s*<([^>]+)>$", from_raw.strip())
@@ -244,6 +240,7 @@ def fetch_emails():
                     "subject":      subject,
                     "preview":      preview,
                     "body":         body,
+                    "body_html":    body_html,
                     "date":         date_iso,
                     "display_time": display_time,
                     "unread":       "\\Seen" not in flags,
@@ -259,7 +256,7 @@ def fetch_emails():
     except imaplib.IMAP4.error as e:
         msg = str(e)
         if "AUTHENTICATIONFAILED" in msg or "Invalid credentials" in msg:
-            return jsonify({"error": "Authentication failed. Check the Gmail App Password in Firestore."}), 401
+            return jsonify({"error": "Authentication failed. Check the Gmail App Password in MongoDB."}), 401
         return jsonify({"error": f"IMAP error: {msg}"}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 503

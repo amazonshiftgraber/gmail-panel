@@ -65,6 +65,9 @@
       transition: all 0.15s;
     }
     .icon-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .icon-btn.spinning { pointer-events: none; color: var(--accent); }
+    .icon-btn.spinning span { display: inline-block; animation: spin 0.7s linear infinite; }
 
     /* ── Main ── */
     .main { display: flex; flex: 1; overflow: hidden; }
@@ -189,6 +192,7 @@
     .detail-body { flex: 1; overflow-y: auto; padding: 18px 22px; display: none; }
     .detail-body.on { display: block; }
     .dbody { font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+    .dbody-frame { width: 100%; border: none; min-height: 400px; display: block; }
 
     .detail-bar { padding: 11px 22px; border-top: 1px solid var(--border); display: none; gap: 8px; }
     .detail-bar.on { display: flex; }
@@ -379,6 +383,7 @@
     <div id="topbar-chip"><span class="no-acct">Click to select →</span></div>
   </button>
   <div class="topbar-right">
+    <button class="icon-btn" id="refresh-btn" onclick="refreshEmails()" title="Refresh emails"><span>↻</span></button>
     <button class="icon-btn" onclick="openSettings()" title="Sender filters">⚙️</button>
   </div>
 </div>
@@ -447,6 +452,7 @@
     </div>
     <div class="detail-body" id="dbody-wrap">
       <div class="dbody" id="dbody"></div>
+      <iframe class="dbody-frame" id="dbody-frame" sandbox="allow-same-origin" style="display:none"></iframe>
     </div>
     <div class="detail-bar" id="dbar">
       <button class="btn btn-p">↩ Reply</button>
@@ -586,6 +592,15 @@
     } catch (e) {
       showToast('Could not save settings to Firestore.', true);
     }
+  }
+
+  // ── Refresh button ────────────────────────────────────────
+  async function refreshEmails() {
+    if (!selectedAcct) return;
+    const btn = document.getElementById('refresh-btn');
+    btn.classList.add('spinning');
+    await fetchEmails();
+    btn.classList.remove('spinning');
   }
 
   // ── Fetch emails via IMAP (through backend) ───────────────
@@ -746,7 +761,21 @@
     document.getElementById('d-from').textContent    = e.from_name || e.from;
     document.getElementById('d-addr').textContent    = e.from;
     document.getElementById('d-time').textContent    = e.display_time || '';
-    document.getElementById('dbody').textContent     = e.body || '';
+    const dbodyDiv   = document.getElementById('dbody');
+    const dbodyFrame = document.getElementById('dbody-frame');
+    if (e.body_html) {
+      dbodyDiv.style.display   = 'none';
+      dbodyFrame.style.display = 'block';
+      dbodyFrame.srcdoc        = e.body_html;
+      dbodyFrame.onload = () => {
+        const h = dbodyFrame.contentDocument.body.scrollHeight;
+        dbodyFrame.style.height = (h + 32) + 'px';
+      };
+    } else {
+      dbodyFrame.style.display = 'none';
+      dbodyDiv.style.display   = '';
+      dbodyDiv.textContent     = e.body || '';
+    }
 
     const av = document.getElementById('d-avatar');
     av.textContent  = initials(e.from_name || e.from);
