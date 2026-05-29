@@ -8,16 +8,16 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: #0f0f12;
-      --surface: #1a1a22;
-      --surface2: #22222e;
-      --border: #2e2e3e;
+      --bg: #f6f8fa;
+      --surface: #ffffff;
+      --surface2: #eef0f3;
+      --border: #d8dee4;
       --accent: #6c63ff;
-      --accent-soft: rgba(108,99,255,0.15);
-      --text: #e8e8f0;
-      --muted: #6b6b80;
-      --danger: #ff5c5c;
-      --green: #4ade80;
+      --accent-soft: rgba(108,99,255,0.12);
+      --text: #1f2937;
+      --muted: #6b7280;
+      --danger: #dc2626;
+      --green: #10b981;
     }
 
     body {
@@ -38,24 +38,13 @@
                  display: flex; align-items: center; justify-content: center; font-size: 13px; }
     .divider { width: 1px; height: 22px; background: var(--border); }
 
-    .acct-trigger {
-      display: flex; align-items: center; gap: 8px;
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 8px; padding: 6px 12px;
-      color: var(--text); font-size: 12px; cursor: pointer;
-      transition: border-color 0.15s; max-width: 320px;
-    }
-    .acct-trigger:hover { border-color: var(--accent); }
-
     .acct-chip {
       background: var(--accent-soft); color: var(--accent);
       border-radius: 4px; padding: 2px 8px;
       font-size: 11px; font-weight: 600; white-space: nowrap;
     }
 
-    .no-acct { color: var(--muted); font-size: 12px; }
-
-    .topbar-right { margin-left: auto; display: flex; gap: 8px; }
+.topbar-right { margin-left: auto; display: flex; gap: 8px; }
 
     .icon-btn {
       width: 30px; height: 30px; background: none;
@@ -76,8 +65,12 @@
     .sidebar {
       width: 192px; min-width: 192px;
       background: var(--surface); border-right: 1px solid var(--border);
-      display: flex; flex-direction: column; padding: 12px 0; overflow-y: auto;
+      display: flex; flex-direction: column; padding: 12px 0; overflow: hidden;
     }
+
+    .sb-accounts-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+    .sb-accounts-scroll::-webkit-scrollbar { width: 3px; }
+    .sb-accounts-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
     .sb-section { padding: 8px 10px 4px; }
     .sb-label {
@@ -99,6 +92,24 @@
       margin-left: auto; background: var(--accent); color: #fff;
       font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 20px;
     }
+
+    .sb-days { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 2px; margin-top: 4px; }
+    .sb-day {
+      padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 500;
+      cursor: pointer; border: 1px solid var(--border); background: none; color: var(--muted);
+      transition: all 0.12s;
+    }
+    .sb-day:hover { border-color: var(--accent); color: var(--accent); }
+    .sb-day.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+    .sb-search { padding: 4px 2px 6px; }
+    .sb-search input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 5px 9px; color: var(--text); font-size: 11px;
+      outline: none; transition: border-color 0.15s; box-sizing: border-box;
+    }
+    .sb-search input:focus { border-color: var(--accent); }
+    .sb-search input::placeholder { color: var(--muted); }
 
     .sb-bottom { margin-top: auto; padding: 10px; border-top: 1px solid var(--border); }
     .sb-btn {
@@ -199,20 +210,20 @@
 
     .btn { padding: 6px 14px; border-radius: 7px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
     .btn-p { background: var(--accent); color: #fff; }
-    .btn-p:hover { background: #7c74ff; }
+    .btn-p:hover { background: #5b54e6; }
     .btn-g { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
     .btn-g:hover { background: var(--surface2); }
 
     /* ── Modals ── */
     .overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+      position: fixed; inset: 0; background: rgba(15,23,42,0.4);
       backdrop-filter: blur(4px); display: none;
       align-items: center; justify-content: center; z-index: 100;
     }
     .overlay.open { display: flex; }
 
     .modal { background: var(--surface); border: 1px solid var(--border);
-             border-radius: 14px; box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+             border-radius: 14px; box-shadow: 0 16px 48px rgba(15,23,42,0.12), 0 4px 12px rgba(15,23,42,0.06);
              overflow: hidden; display: flex; flex-direction: column; }
 
     .modal-lg { width: 520px; max-width: 95vw; max-height: 82vh; }
@@ -231,62 +242,7 @@
     }
     .mclose:hover { background: var(--border); color: var(--text); }
 
-    /* Account modal */
-    .am-search { padding: 10px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    .am-search input {
-      width: 100%; background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 7px; padding: 7px 11px; color: var(--text); font-size: 12px;
-      outline: none; transition: border-color 0.15s;
-    }
-    .am-search input:focus { border-color: var(--accent); }
-    .am-search input::placeholder { color: var(--muted); }
-
-    /* Days picker shown inside modal */
-    .days-row {
-      padding: 10px 16px; border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
-      background: var(--surface2);
-    }
-    .days-row label { font-size: 12px; color: var(--text); white-space: nowrap; }
-    .days-btns { display: flex; gap: 5px; }
-    .day-btn {
-      padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500;
-      cursor: pointer; border: 1px solid var(--border); background: none; color: var(--muted);
-      transition: all 0.12s;
-    }
-    .day-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .day-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-
-    .acct-list { overflow-y: auto; flex: 1; padding: 6px 10px; }
-    .acct-list::-webkit-scrollbar { width: 4px; }
-    .acct-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-    .acct-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 8px 10px; border-radius: 7px; cursor: pointer;
-      transition: background 0.1s; border: 1px solid transparent;
-    }
-    .acct-item:hover { background: var(--surface2); }
-    .acct-item.selected { background: var(--accent-soft); border-color: var(--accent); }
-
-    .radio-circle {
-      width: 16px; height: 16px; min-width: 16px; border-radius: 50%;
-      border: 2px solid var(--border); display: flex; align-items: center; justify-content: center;
-      transition: all 0.12s;
-    }
-    .acct-item.selected .radio-circle { border-color: var(--accent); }
-    .radio-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: none; }
-    .acct-item.selected .radio-dot { display: block; }
-
-    .aa-avatar { width: 28px; height: 28px; border-radius: 50%;
-                 display: flex; align-items: center; justify-content: center;
-                 font-size: 11px; font-weight: 700; color: #fff; }
-
-    .aa-info { flex: 1; min-width: 0; }
-    .aa-email { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .aa-label { font-size: 10px; color: var(--muted); margin-top: 1px; }
-
-    .mfooter {
+.mfooter {
       padding: 11px 18px; border-top: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
     }
@@ -307,7 +263,7 @@
     .w-lbl { font-size: 10px; color: var(--muted); }
     .rm-btn { background: none; border: none; color: var(--muted); cursor: pointer;
               font-size: 12px; padding: 3px; border-radius: 4px; transition: all 0.12s; }
-    .rm-btn:hover { color: var(--danger); background: rgba(255,92,92,0.1); }
+    .rm-btn:hover { color: var(--danger); background: rgba(220,38,38,0.08); }
     .add-row { display: flex; gap: 7px; }
     .add-in {
       flex: 1; background: var(--surface2); border: 1px solid var(--border);
@@ -321,7 +277,7 @@
       border: none; border-radius: 7px; font-size: 12px; font-weight: 600;
       cursor: pointer; transition: background 0.15s;
     }
-    .add-btn-s:hover { background: #7c74ff; }
+    .add-btn-s:hover { background: #5b54e6; }
 
     /* Loading / error */
     .loading-bar {
@@ -339,7 +295,7 @@
 
     .error-banner {
       display: none; margin: 10px 12px; padding: 9px 12px;
-      background: rgba(255,92,92,0.1); border: 1px solid var(--danger);
+      background: rgba(220,38,38,0.08); border: 1px solid var(--danger);
       border-radius: 7px; font-size: 12px; color: var(--danger);
     }
     .error-banner.on { display: block; }
@@ -360,6 +316,7 @@
       background: var(--surface); border: 1px solid var(--border);
       border-left: 3px solid var(--green); padding: 9px 14px;
       border-radius: 8px; font-size: 12px; color: var(--text);
+      box-shadow: 0 8px 24px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04);
       z-index: 200; opacity: 0; transform: translateY(8px);
       transition: all 0.2s; pointer-events: none;
     }
@@ -376,12 +333,7 @@
 <!-- Top Bar -->
 <div class="topbar">
   <div class="logo"><div class="logo-icon">📬</div> MyMailbox</div>
-  <div class="divider"></div>
-  <button class="acct-trigger" onclick="openAccountModal()">
-    <span style="font-size:12px">👤</span>
-    <span style="color:var(--muted);font-size:11px">Account:</span>
-    <div id="topbar-chip"><span class="no-acct">Click to select →</span></div>
-  </button>
+  <div id="topbar-chip" style="margin-left:10px"></div>
   <div class="topbar-right">
     <button class="icon-btn" id="refresh-btn" onclick="refreshEmails()" title="Refresh emails"><span>↻</span></button>
     <button class="icon-btn" onclick="openSettings()" title="Sender filters">⚙️</button>
@@ -407,8 +359,26 @@
     </div>
 
     <div class="sb-section" style="margin-top:6px">
-      <div class="sb-label">Watched Senders</div>
-      <div id="sender-sb"></div>
+      <div class="sb-label">Days</div>
+      <div class="sb-days">
+        <button class="sb-day active" onclick="setSbDays(3)">3d</button>
+        <button class="sb-day" onclick="setSbDays(7)">7d</button>
+        <button class="sb-day" onclick="setSbDays(14)">14d</button>
+        <button class="sb-day" onclick="setSbDays(30)">30d</button>
+      </div>
+    </div>
+
+    <div class="sb-section" style="margin-top:6px;flex-shrink:0">
+      <div class="sb-label">Accounts</div>
+      <div class="sb-search">
+        <input id="sb-acct-search" type="text" placeholder="Search…" oninput="renderSenderSidebar()" />
+      </div>
+    </div>
+
+    <div class="sb-accounts-scroll">
+      <div style="padding: 0 10px 8px">
+        <div id="sender-sb"></div>
+      </div>
     </div>
 
     <div class="sb-bottom">
@@ -459,42 +429,6 @@
       <button class="btn btn-g">↪ Forward</button>
       <button class="btn btn-g">⭐ Star</button>
       <button class="btn btn-g" style="margin-left:auto;color:var(--danger)">🗑 Delete</button>
-    </div>
-  </div>
-</div>
-
-<!-- Account Modal -->
-<div class="overlay" id="acct-overlay" onclick="if(event.target===this)closeAccountModal()">
-  <div class="modal modal-lg">
-    <div class="mhdr">
-      <div>
-        <div class="mtitle">👤 Select Account</div>
-        <div class="msub">Choose one Gmail account to monitor</div>
-      </div>
-      <button class="mclose" onclick="closeAccountModal()">✕</button>
-    </div>
-
-    <div class="am-search">
-      <input id="acct-search" type="text" placeholder="Search by email or label…" oninput="renderAcctList()" />
-    </div>
-
-    <!-- Days picker (always visible) -->
-    <div class="days-row">
-      <label>Fetch emails from last</label>
-      <div class="days-btns" id="days-btns">
-        <button class="day-btn" onclick="setDays(1)">1 day</button>
-        <button class="day-btn active" onclick="setDays(3)">3 days</button>
-        <button class="day-btn" onclick="setDays(7)">7 days</button>
-        <button class="day-btn" onclick="setDays(14)">14 days</button>
-        <button class="day-btn" onclick="setDays(30)">30 days</button>
-      </div>
-    </div>
-
-    <div class="acct-list" id="acct-list"></div>
-
-    <div class="mfooter">
-      <span class="mhint" id="acct-selection-hint">No account selected</span>
-      <button class="btn btn-p" id="apply-btn" onclick="applyAccount()">Apply &amp; Fetch</button>
     </div>
   </div>
 </div>
@@ -637,6 +571,7 @@
       showLoading(false);
       renderList();
       renderSenderSidebar();
+      renderFilterTags();
       showToast(`✓ Fetched ${emails.length} email${emails.length !== 1 ? 's' : ''} — IMAP disconnected`);
     } catch (e) {
       showError('Could not reach the server. Is server.py running?');
@@ -722,27 +657,55 @@
   // ── Render sender sidebar ────────────────────────────────
   function renderSenderSidebar() {
     const el = document.getElementById('sender-sb');
-    if (!watchedSenders.length) {
-      el.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:3px 8px">None configured</div>`;
+    const q  = (document.getElementById('sb-acct-search')?.value || '').toLowerCase();
+    const list = allAccounts.filter(a =>
+      !q || a.email.toLowerCase().includes(q) || (a.label || '').toLowerCase().includes(q)
+    );
+    if (!list.length) {
+      el.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:3px 8px">${allAccounts.length ? 'No match' : 'No accounts'}</div>`;
       return;
     }
-    el.innerHTML = watchedSenders.map(s => {
-      const cnt = emails.filter(e => e.from === s.email).length;
-      return `<div class="sb-item ${currentView === s.email ? 'active' : ''}" onclick="setView(this,'${s.email}')">
-        <span style="width:6px;height:6px;border-radius:50%;background:${s.color};flex-shrink:0;display:inline-block"></span>
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(s.label)}</span>
-        <span style="margin-left:auto;font-size:10px;color:var(--muted)">${cnt}</span>
+    el.innerHTML = list.map((a, i) => {
+      const isActive = selectedAcct && selectedAcct.email === a.email;
+      const globalIdx = allAccounts.indexOf(a);
+      return `<div class="sb-item ${isActive ? 'active' : ''}" onclick="selectFromSidebar('${escHtml(a.email)}')" style="align-items:center">
+        <div class="eavatar" style="width:18px;height:18px;min-width:18px;font-size:8px;background:${COLORS[globalIdx % COLORS.length]}">${initials(a.email)}</div>
+        <div style="min-width:0;flex:1;overflow:hidden">
+          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(a.label || a.email)}</div>
+          <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(a.email)}</div>
+        </div>
       </div>`;
     }).join('');
+  }
+
+  function setSbDays(n) {
+    fetchDays = n;
+    document.querySelectorAll('.sb-day').forEach(b => {
+      b.classList.toggle('active', b.textContent === n + 'd');
+    });
+    if (selectedAcct && emails.length > 0) fetchEmails();
+  }
+
+  function selectFromSidebar(email) {
+    const a = allAccounts.find(x => x.email === email);
+    if (!a) return;
+    selectedAcct = a;
+    updateTopbarChip();
+    renderSenderSidebar();
+    renderFilterTags();
+    if (watchedSenders.length) fetchEmails();
+    else openSettings();
   }
 
   // ── Render filter tags ───────────────────────────────────
   function renderFilterTags() {
     const el  = document.getElementById('filter-tags');
     const all = [{ id: 'all', label: 'All' }, ...watchedSenders.map(s => ({ id: s.email, label: s.label }))];
-    el.innerHTML = all.map(t =>
-      `<span class="tag ${currentView === t.id ? 'active' : ''}" onclick="setViewTag('${t.id}')">${escHtml(t.label)}</span>`
-    ).join('');
+    el.innerHTML = all.map(t => {
+      const cnt = t.id === 'all' ? emails.length : emails.filter(e => e.from === t.id).length;
+      const badge = cnt > 0 ? ` <span style="opacity:0.7;font-weight:400">${cnt}</span>` : '';
+      return `<span class="tag ${currentView === t.id ? 'active' : ''}" onclick="setViewTag('${t.id}')">${escHtml(t.label)}${badge}</span>`;
+    }).join('');
   }
 
   // ── Open email detail ────────────────────────────────────
@@ -817,75 +780,13 @@
     renderList();
   }
 
-  // ── Account Modal ────────────────────────────────────────
-  function openAccountModal() {
-    document.getElementById('acct-search').value = '';
-    renderAcctList();
-    document.getElementById('acct-overlay').classList.add('open');
-  }
-
-  function closeAccountModal() {
-    document.getElementById('acct-overlay').classList.remove('open');
-  }
-
-  function renderAcctList() {
-    const q   = document.getElementById('acct-search').value.toLowerCase();
-    const list = allAccounts.filter(a =>
-      !q || a.email.toLowerCase().includes(q) || (a.label || '').toLowerCase().includes(q)
-    );
-
-    const hint = document.getElementById('acct-selection-hint');
-    hint.textContent = selectedAcct ? `Selected: ${selectedAcct.email}` : 'No account selected';
-
-    const el = document.getElementById('acct-list');
-    if (list.length === 0) {
-      el.innerHTML = `<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">No accounts match.</div>`;
-      return;
-    }
-
-    el.innerHTML = list.map((a, i) => {
-      const isSel = selectedAcct && selectedAcct.email === a.email;
-      return `<div class="acct-item ${isSel ? 'selected' : ''}" onclick="selectAcct('${a.email}')">
-        <div class="radio-circle"><div class="radio-dot"></div></div>
-        <div class="aa-avatar ${AVATAR_CLASSES[i % 8]}">${initials(a.email)}</div>
-        <div class="aa-info">
-          <div class="aa-email">${escHtml(a.email)}</div>
-          <div class="aa-label">${escHtml(a.label || '')}</div>
-        </div>
-      </div>`;
-    }).join('');
-  }
-
-  function selectAcct(email) {
-    const a = allAccounts.find(x => x.email === email);
-    selectedAcct = a || null;
-    renderAcctList();
-  }
-
-  function setDays(n) {
-    fetchDays = n;
-    document.querySelectorAll('.day-btn').forEach(b => {
-      b.classList.toggle('active', parseInt(b.textContent) === n || b.textContent === n + ' days' || b.textContent === n + ' day');
-    });
-  }
-
-  function applyAccount() {
-    if (!selectedAcct) { showToast('Please select an account first.', true); return; }
-    if (!watchedSenders.length) { showToast('Add at least one sender filter in ⚙️ settings.', true); return; }
-    closeAccountModal();
-    updateTopbarChip();
-    renderSenderSidebar();
-    renderFilterTags();
-    fetchEmails();
-  }
-
   function updateTopbarChip() {
     const el = document.getElementById('topbar-chip');
     if (selectedAcct) {
       el.innerHTML = `<span class="acct-chip">${escHtml(selectedAcct.label || selectedAcct.email)}</span>
         <span style="font-size:10px;color:var(--muted);margin-left:4px">${fetchDays}d</span>`;
     } else {
-      el.innerHTML = `<span class="no-acct">Click to select →</span>`;
+      el.innerHTML = '';
     }
   }
 
